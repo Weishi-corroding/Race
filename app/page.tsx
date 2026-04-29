@@ -1,65 +1,112 @@
-import Image from "next/image";
+// app/page.tsx
+'use client'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import MatchCard from './components/match-card'
+import { Match, Result } from '@/lib/types'
 
 export default function Home() {
+  const [matches, setMatches] = useState<Match[]>([])
+  const [filteredMatches, setFilteredMatches] = useState<Match[]>([])
+  const [allResults, setAllResults] = useState<Result[]>([])
+  const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
+  
+  const [group, setGroup] = useState<'男双' | '女双' | '混双'>('男双')
+
+  useEffect(() => {
+    loadMatches()
+    loadAllResults()
+  }, [])
+
+  useEffect(() => {
+    const filtered = matches.filter(m => m.group_name === group)
+    setFilteredMatches(filtered)
+  }, [matches, group])
+
+  async function loadMatches() {
+    const { data } = await supabase
+      .from('matches')
+      .select('*')
+      .order('start_time', { ascending: true })
+    setMatches(data || [])
+  }
+
+  async function loadAllResults() {
+    const { data } = await supabase
+      .from('results')
+      .select('*, teams(*)')  // 确保包含 teams 关联数据
+    setAllResults(data || [])
+  }
+
+  function handleToggleMatch(matchId: string) {
+    setExpandedMatchId(expandedMatchId === matchId ? null : matchId)
+  }
+
+  function getMatchResults(matchId: string): Result[] {
+    return allResults.filter(result => result.match_id === matchId)
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="container">
+      {/* 筛选器 */}
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">比赛筛选</h2>
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">比赛组别</label>
+            <select 
+              className="select w-full"
+              value={group} 
+              onChange={e => setGroup(e.target.value as any)}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              <option value="男双">男双</option>
+              <option value="女双">女双</option>
+              <option value="混双">混双</option>
+            </select>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+
+      {/* 比赛列表 */}
+      <div className="mt-6">
+        <div className="card">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">
+              {group}比赛 ({filteredMatches.length})
+            </h3>
+            {expandedMatchId && (
+              <button 
+                onClick={() => setExpandedMatchId(null)}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                收起所有
+              </button>
+            )}
+          </div>
+          
+          <div className="space-y-4">
+            {filteredMatches.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">
+                暂无{group}比赛
+              </div>
+            ) : (
+              filteredMatches.map(match => {
+                const matchResults = getMatchResults(match.id)
+
+                return (
+                  <MatchCard 
+                    key={match.id} 
+                    match={match}
+                    results={matchResults}
+                    isExpanded={expandedMatchId === match.id}
+                    onToggle={handleToggleMatch}
+                  />
+                )
+              })
+            )}
+          </div>
         </div>
-      </main>
-    </div>
-  );
+      </div>
+      </div>
+  )
 }
